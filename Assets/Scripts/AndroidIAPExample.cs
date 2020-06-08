@@ -5,14 +5,20 @@ using System;
 using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.Purchasing;
+using UnityEngine.Purchasing.Security;
+using UnityEngine.UI;
 
 public class AndroidIAPExample : MonoBehaviour, IStoreListener
 {
+    public Text text;
+
+    ConfigurationBuilder builder;
     // Items list, configurable via inspector
     private List<CatalogItem> Catalog;
 
     // The Unity Purchasing system
-    private static IStoreController m_StoreController;
+    private static IStoreController storeController;
+    private IExtensionProvider extensionProvider;
 
     // Bootstrap the whole thing
     public void Start()
@@ -66,6 +72,8 @@ public class AndroidIAPExample : MonoBehaviour, IStoreListener
         }, result =>
         {
             Debug.Log("Logged in");
+            text.text = "Logged in";
+
             // Refresh available items
             RefreshIAPItems();
         }, error => Debug.LogError(error.GenerateErrorReport()));
@@ -74,7 +82,8 @@ public class AndroidIAPExample : MonoBehaviour, IStoreListener
 
     private void RefreshIAPItems()
     {
-        PlayFabClientAPI.GetCatalogItems(new GetCatalogItemsRequest(), result =>
+        PlayFabClientAPI.GetCatalogItems(new GetCatalogItemsRequest()
+           , result =>
         {
             Catalog = result.Catalog;
 
@@ -90,12 +99,7 @@ public class AndroidIAPExample : MonoBehaviour, IStoreListener
         if (IsInitialized) return;
 
         // Create a builder for IAP service
-#if UNITY_IOS
-        var builder = ConfigurationBuilder.Instance(StandardPurchasingModule.Instance(AppStore.AppleAppStore));
-#elif UNITY_ANDROID
-        var builder = ConfigurationBuilder.Instance(StandardPurchasingModule.Instance(AppStore.GooglePlay));
-#endif
-
+        builder = ConfigurationBuilder.Instance(StandardPurchasingModule.Instance());
         // Register each item from the catalog
         foreach (var item in Catalog)
         {
@@ -111,26 +115,36 @@ public class AndroidIAPExample : MonoBehaviour, IStoreListener
     {
         get
         {
-            return m_StoreController != null && Catalog != null;
+            return storeController != null && Catalog != null;
         }
     }
 
     // This is automatically invoked automatically when IAP service is initialized
     public void OnInitialized(IStoreController controller, IExtensionProvider extensions)
     {
-        m_StoreController = controller;
+        storeController = controller;
+        extensionProvider = extensions;
+
+        //foreach (var product in controller.products.all)
+        //{
+        //    Debug.Log(product.metadata.localizedTitle);
+        //    Debug.Log(product.metadata.localizedDescription);
+        //    Debug.Log(product.metadata.localizedPriceString);
+        //}
     }
 
     // This is automatically invoked automatically when IAP service failed to initialized
     public void OnInitializeFailed(InitializationFailureReason error)
     {
         Debug.Log("OnInitializeFailed InitializationFailureReason:" + error);
+        text.text = "OnInitializeFailed InitializationFailureReason:" + error;
     }
 
     // This is automatically invoked automatically when purchase failed
     public void OnPurchaseFailed(Product product, PurchaseFailureReason failureReason)
     {
         Debug.Log(string.Format("OnPurchaseFailed: FAIL. Product: '{0}', PurchaseFailureReason: {1}", product.definition.storeSpecificId, failureReason));
+        text.text = string.Format("OnPurchaseFailed: FAIL. Product: '{0}', PurchaseFailureReason: {1}", product.definition.storeSpecificId, failureReason);
     }
 
     // This is invoked automatically when successful purchase is ready to be processed
@@ -150,6 +164,8 @@ public class AndroidIAPExample : MonoBehaviour, IStoreListener
         if (e.purchasedProduct == null)
         {
             Debug.LogWarning("Attempted to process purchase with unknown product. Ignoring");
+            text.text = "Attempted to process purchase with unknown product. Ignoring";
+
             return PurchaseProcessingResult.Complete;
         }
 
@@ -157,25 +173,35 @@ public class AndroidIAPExample : MonoBehaviour, IStoreListener
         if (string.IsNullOrEmpty(e.purchasedProduct.receipt))
         {
             Debug.LogWarning("Attempted to process purchase with no receipt: ignoring");
+            text.text = "Attempted to process purchase with no receipt: ignoring";
             return PurchaseProcessingResult.Complete;
         }
 
         Debug.Log("Processing transaction: " + e.purchasedProduct.transactionID);
 
-        // Deserialize receipt
-        var googleReceipt = GooglePurchase.FromJson(e.purchasedProduct.receipt);
+
 #if UNITY_IOS
+        //string receipt = builder.Configure<IAppleConfiguration>().appReceipt;
         PlayFabClientAPI.ValidateIOSReceipt(new ValidateIOSReceiptRequest
         {
             CurrencyCode = e.purchasedProduct.metadata.isoCurrencyCode,
             PurchasePrice = (int)e.purchasedProduct.metadata.localizedPrice * 100,
-            ReceiptData = ""
-        }, result => Debug.Log("Validation successful!")
-        , error => Debug.Log("Validation failed: " + error.GenerateErrorReport()
-         ));
+            ReceiptData = e.purchasedProduct.receipt
+        }, result => {
+            Debug.Log("Validation successful!");
+            text.text = "Validation successful! ";
+        },
+           error => {
+               Debug.Log("Validation failed: " + error.GenerateErrorReport());
+               text.text = "Validation failed: " + error.GenerateErrorReport();
+
+           }
+        );
 
 #elif UNITY_ANDROID
 
+        // Deserialize receipt
+        var googleReceipt = GooglePurchase.FromJson(e.purchasedProduct.receipt);
 
         // Invoke receipt validation
         // This will not only validate a receipt, but will also grant player corresponding items
@@ -190,12 +216,17 @@ public class AndroidIAPExample : MonoBehaviour, IStoreListener
             ReceiptJson = googleReceipt.PayloadData.json,
             // Pass in the signature
             Signature = googleReceipt.PayloadData.signature
-        }, result => Debug.Log("Validation successful!"),
-           error => Debug.Log("Validation failed: " + error.GenerateErrorReport())
+        }, result => {
+            Debug.Log("Validation successful!");
+               text.text = "Validation successful! ";
+        },
+           error => {
+               Debug.Log("Validation failed: " + error.GenerateErrorReport());
+               text.text = "Validation failed: " + error.GenerateErrorReport();
+
+           }
         );
 #endif
-
-
         return PurchaseProcessingResult.Complete;
     }
 
@@ -206,7 +237,7 @@ public class AndroidIAPExample : MonoBehaviour, IStoreListener
         if (!IsInitialized) throw new Exception("IAP Service is not initialized!");
 
         // Pass in the product id to initiate purchase
-        m_StoreController.InitiatePurchase(productId);
+        storeController.InitiatePurchase(productId);
     }
 }
 
