@@ -44,11 +44,21 @@ public class AndroidIAPExample : MonoBehaviour, IStoreListener
             }
         }
     }
-
     // This is invoked manually on Start to initiate login ops
     private void Login()
     {
-        // Login with Android ID
+#if UNITY_IOS
+        PlayFabClientAPI.LoginWithIOSDeviceID(new LoginWithIOSDeviceIDRequest()
+        {
+            CreateAccount = true,
+            DeviceId = SystemInfo.deviceUniqueIdentifier
+        }, result =>
+        {
+            Debug.Log("Logged in");
+            // Refresh available items
+            RefreshIAPItems();
+        }, error => Debug.LogError(error.GenerateErrorReport()));
+#elif UNITY_ANDROID
         PlayFabClientAPI.LoginWithAndroidDeviceID(new LoginWithAndroidDeviceIDRequest()
         {
             CreateAccount = true,
@@ -59,6 +69,7 @@ public class AndroidIAPExample : MonoBehaviour, IStoreListener
             // Refresh available items
             RefreshIAPItems();
         }, error => Debug.LogError(error.GenerateErrorReport()));
+#endif
     }
 
     private void RefreshIAPItems()
@@ -79,7 +90,11 @@ public class AndroidIAPExample : MonoBehaviour, IStoreListener
         if (IsInitialized) return;
 
         // Create a builder for IAP service
+#if UNITY_IOS
+        var builder = ConfigurationBuilder.Instance(StandardPurchasingModule.Instance(AppStore.AppleAppStore));
+#elif UNITY_ANDROID
         var builder = ConfigurationBuilder.Instance(StandardPurchasingModule.Instance(AppStore.GooglePlay));
+#endif
 
         // Register each item from the catalog
         foreach (var item in Catalog)
@@ -149,6 +164,18 @@ public class AndroidIAPExample : MonoBehaviour, IStoreListener
 
         // Deserialize receipt
         var googleReceipt = GooglePurchase.FromJson(e.purchasedProduct.receipt);
+#if UNITY_IOS
+        PlayFabClientAPI.ValidateIOSReceipt(new ValidateIOSReceiptRequest
+        {
+            CurrencyCode = e.purchasedProduct.metadata.isoCurrencyCode,
+            PurchasePrice = (int)e.purchasedProduct.metadata.localizedPrice * 100,
+            ReceiptData = ""
+        }, result => Debug.Log("Validation successful!")
+        , error => Debug.Log("Validation failed: " + error.GenerateErrorReport()
+         ));
+
+#elif UNITY_ANDROID
+
 
         // Invoke receipt validation
         // This will not only validate a receipt, but will also grant player corresponding items
@@ -166,6 +193,8 @@ public class AndroidIAPExample : MonoBehaviour, IStoreListener
         }, result => Debug.Log("Validation successful!"),
            error => Debug.Log("Validation failed: " + error.GenerateErrorReport())
         );
+#endif
+
 
         return PurchaseProcessingResult.Complete;
     }
