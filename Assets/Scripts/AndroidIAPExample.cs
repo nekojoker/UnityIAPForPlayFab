@@ -11,6 +11,8 @@ using UnityEngine.UI;
 public class AndroidIAPExample : MonoBehaviour, IStoreListener
 {
     public Text text;
+    public Text receiptText;
+    public Text restoreText;
 
     ConfigurationBuilder builder;
     // Items list, configurable via inspector
@@ -178,15 +180,23 @@ public class AndroidIAPExample : MonoBehaviour, IStoreListener
         }
 
         Debug.Log("Processing transaction: " + e.purchasedProduct.transactionID);
+        receiptText.text = e.purchasedProduct.receipt;
 
 
 #if UNITY_IOS
         //string receipt = builder.Configure<IAppleConfiguration>().appReceipt;
+        //object receipt = PlayFabSimpleJson.DeserializeObject(e.purchasedProduct.receipt);
+
+        var wrapper = (Dictionary<string, object>)MiniJson.JsonDecode(e.purchasedProduct.receipt);
+     
+        var store = (string)wrapper["Store"];
+        var payload = (string)wrapper["Payload"]; // For Apple this will be the base64 encoded ASN.1 receipt
+
         PlayFabClientAPI.ValidateIOSReceipt(new ValidateIOSReceiptRequest
         {
             CurrencyCode = e.purchasedProduct.metadata.isoCurrencyCode,
             PurchasePrice = (int)e.purchasedProduct.metadata.localizedPrice * 100,
-            ReceiptData = e.purchasedProduct.receipt
+            ReceiptData = payload
         }, result => {
             Debug.Log("Validation successful!");
             text.text = "Validation successful! ";
@@ -194,7 +204,6 @@ public class AndroidIAPExample : MonoBehaviour, IStoreListener
            error => {
                Debug.Log("Validation failed: " + error.GenerateErrorReport());
                text.text = "Validation failed: " + error.GenerateErrorReport();
-
            }
         );
 
@@ -238,6 +247,41 @@ public class AndroidIAPExample : MonoBehaviour, IStoreListener
 
         // Pass in the product id to initiate purchase
         storeController.InitiatePurchase(productId);
+    }
+    public void RestorePurchases()
+    {
+        // If Purchasing has not yet been set up ...
+        if (!IsInitialized)
+        {
+            // ... report the situation and stop restoring. Consider either waiting longer, or retrying initialization.
+            Debug.Log("RestorePurchases FAIL. Not initialized.");
+            return;
+        }
+
+        // If we are running on an Apple device ... 
+        if (Application.platform == RuntimePlatform.IPhonePlayer ||
+            Application.platform == RuntimePlatform.OSXPlayer)
+        {
+            // ... begin restoring purchases
+            Debug.Log("RestorePurchases started ...");
+
+            // Fetch the Apple store-specific subsystem.
+            var apple = extensionProvider.GetExtension<IAppleExtensions>();
+            // Begin the asynchronous process of restoring purchases. Expect a confirmation response in 
+            // the Action<bool> below, and ProcessPurchase if there are previously purchased products to restore.
+            apple.RestoreTransactions((result) => {
+                // The first phase of restoration. If no more responses are received on ProcessPurchase then 
+                // no purchases are available to be restored.
+                Debug.Log("RestorePurchases continuing: " + result + ". If no further messages, no purchases available to restore.");
+                restoreText.text = "RestorePurchases continuing: " + result;
+            });
+        }
+        // Otherwise ...
+        else
+        {
+            // We are not running on an Apple device. No work is necessary to restore purchases.
+            Debug.Log("RestorePurchases FAIL. Not supported on this platform. Current = " + Application.platform);
+        }
     }
 }
 
