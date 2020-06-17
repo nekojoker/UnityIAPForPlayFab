@@ -9,7 +9,7 @@ using UnityEngine.Purchasing.Security;
 using UnityEngine.UI;
 using System.Linq;
 
-public class AndroidIAPExample : MonoBehaviour, IStoreListener
+public class IAPExample : MonoBehaviour, IStoreListener
 {
     public Text text;
     public Text receiptText;
