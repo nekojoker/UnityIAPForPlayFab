@@ -2,7 +2,9 @@
 
 ## Description
 
-This is a sample program that integrates PlayFab with UnityIAP.
+This is a sample program that integrates PlayFab with UnityIAP.  
+For more information, see the following articles.  
+https://playfab-master.com/playfab-unity-iap (Japanese)
 
 ---
 
